@@ -69,8 +69,10 @@ final class StudyModelsTests: XCTestCase {
     func testFormatPolicyDoesNotPromiseUniversalAVPlayerSupport() {
         XCTAssertTrue(AlistFile(name: "a.MP4", path: "/a.MP4").isDirectlyPlayable)
         XCTAssertTrue(AlistFile(name: "a.m3u8", path: "/a.m3u8").isDirectlyPlayable)
-        XCTAssertTrue(AlistFile(name: "a.flv", path: "/a.flv").needsTranscode)
+        XCTAssertTrue(AlistFile(name: "a.flv", path: "/a.flv").usesVLCKit)
+        XCTAssertFalse(AlistFile(name: "a.flv", path: "/a.flv").isDirectlyPlayable)
         XCTAssertFalse(AlistFile(name: "a.mkv", path: "/a.mkv").isDirectlyPlayable)
+        XCTAssertTrue(AlistFile(name: "a.mkv", path: "/a.mkv").usesVLCKit)
         XCTAssertFalse(AlistFile(name: "notes.pdf", path: "/notes.pdf").isVideo)
     }
 
