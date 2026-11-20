@@ -83,7 +83,20 @@ private final class URLProtocolStub: URLProtocol {
 
 private extension URLRequest {
     var bodyJSON: [String: Any] {
-        guard let httpBody else { return [:] }
-        return (try? JSONSerialization.jsonObject(with: httpBody)) as? [String: Any] ?? [:]
+        if let httpBody {
+            return (try? JSONSerialization.jsonObject(with: httpBody)) as? [String: Any] ?? [:]
+        }
+        guard let httpBodyStream else { return [:] }
+        httpBodyStream.open()
+        defer { httpBodyStream.close() }
+        let data = NSMutableData()
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+        defer { buffer.deallocate() }
+        while httpBodyStream.hasBytesAvailable {
+            let count = httpBodyStream.read(buffer, maxLength: 4096)
+            guard count > 0 else { break }
+            data.append(buffer, length: count)
+        }
+        return (try? JSONSerialization.jsonObject(with: data as Data)) as? [String: Any] ?? [:]
     }
 }
