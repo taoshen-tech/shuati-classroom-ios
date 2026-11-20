@@ -10,7 +10,7 @@
 - 本地学习记录、真实视频目录完成度、最近学习、计划日期和云端合并。
 - 每门课程有独立的防抖同步任务，不共用一个会互相覆盖进度的全局任务。
 - 自定义横屏播放器、加载与失败状态、重试、上一集与下一集。
-- 未签名 IPA 的 GitHub Actions 构建流程（工作流文件待补充 `workflow` 授权后提交）。
+- 未签名 IPA 的 GitHub Actions 构建流程。
 
 ## 播放手势
 
@@ -53,7 +53,7 @@ open ShuaTiClassroom.xcodeproj
 
 ## GitHub Actions 未签名 IPA
 
-构建配置位于项目交付目录的 `.github/workflows/build.yml`。当前 GitHub 连接缺少 `workflow` scope，重新授权后即可提交到仓库。工作流会依次执行单元测试、无签名 Archive 和 IPA 打包，生成 `ShuaTiClassroom-unsigned-ipa` 构件。
+每次推送到 `main` 或手动运行 `Test and unsigned IPA` 工作流时，会依次执行单元测试、无签名 Archive 和 IPA 打包。完成后在 Actions 运行详情中下载 `ShuaTiClassroom-unsigned-ipa` 构件，再使用自己的签名工具安装。
 
 ## 实现参考
 
