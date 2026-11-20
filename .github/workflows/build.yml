@@ -77,16 +77,14 @@ jobs:
 
       - name: Build signed archive
         run: |
+          # 签名设置已配置在 app target（project.yml），不通过命令行全局下发，
+          # 否则 Pods 静态库 target 会报 "does not support provisioning profiles"
           xcodebuild clean archive \
             -workspace ShuaTiClassroom.xcworkspace \
             -scheme ShuaTiClassroom \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/ShuaTiClassroom.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY='iPhone Distribution' \
-            DEVELOPMENT_TEAM='7V22PLN998' \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID"
+            -archivePath "$RUNNER_TEMP/ShuaTiClassroom.xcarchive"
 
       - name: Export signed IPA
         run: |
