@@ -26,6 +26,12 @@ targets:
     deploymentTarget: "15.0"
     settings:
       groups: [common]
+      base:
+        # 签名只配在 app target，Pods 静态库 target 不带手动 profile
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: "7V22PLN998"
+        CODE_SIGN_IDENTITY: "iPhone Distribution"
+        PROVISIONING_PROFILE_SPECIFIER: "07dd5a93-e3bd-4f7a-95ab-4832da88adb6"
     sources:
       - path: Sources
       - path: Support
