@@ -193,7 +193,9 @@ struct AlistAPIClient {
     }
 
     private func resolvedPath(for file: AlistFile, parent: String) -> String {
-        file.path.isEmpty ? normalized(parent) + "/" + file.name : normalized(file.path)
+        // Alist fs/list 返回的 path 是相对父目录的路径（如 "01.2026昭昭"），
+        // 不能直接当绝对路径用，否则丢掉课程根目录前缀（报 storage not found）
+        normalized(parent) + "/" + file.name
     }
 
     private func normalized(_ path: String) -> String {
