@@ -46,7 +46,7 @@ final class AppEnvironment {
 }
 
 enum Keychain {
-    private static let service = "com.taoshentech.shuaticlassroom.credentials"
+    private static let service = "com.nuownqyyy886.ct1218.credentials"
 
     static func save(_ value: String, account: String) {
         let data = Data(value.utf8)
