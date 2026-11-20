@@ -26,11 +26,13 @@ final class VLCPlaybackController: NSObject, PlaybackEngine {
     }
 
     var currentTime: Double {
-        milliseconds(player.time?.intValue ?? 0)
+        let t: VLCTime? = player.time
+        return milliseconds(t?.intValue ?? 0)
     }
 
     var duration: Double {
-        let value = milliseconds(player.media?.length.intValue ?? 0)
+        let len: VLCTime? = player.media?.length
+        let value = milliseconds(len?.intValue ?? 0)
         return value > 0 ? value : 0
     }
 
