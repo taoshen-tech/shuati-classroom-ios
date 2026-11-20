@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class StudyStore {
     static let didChangeNotification = Notification.Name("StudyStore.didChange")
-    static let coursePathUserInfoKey = "coursePath"
+    nonisolated static let coursePathUserInfoKey = "coursePath"
 
     private unowned let environment: AppEnvironment
     private var states: [String: CourseState] = [:]
