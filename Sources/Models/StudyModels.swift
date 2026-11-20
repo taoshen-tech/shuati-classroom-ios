@@ -69,7 +69,7 @@ struct AlistFile: Decodable {
         ["mp4", "mov", "m4v", "m3u8"].contains(fileExtension)
     }
 
-    var needsTranscode: Bool { fileExtension == "flv" }
+    var usesVLCKit: Bool { isVideo && !isDirectlyPlayable }
 }
 
 enum StudyStatus: String, Codable {

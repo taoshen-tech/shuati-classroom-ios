@@ -35,6 +35,8 @@ final class PlayerViewController: UIViewController {
     private var hideWorkItem: DispatchWorkItem?
     private var loadTask: Task<Void, Never>?
     private var loadGeneration = 0
+    private var currentSource: PlaybackSource?
+    private var usedTranscodeFallback = false
     private var lastProgressSave = Date.distantPast
     private var draggingSlider = false
     private var sliderWasPlaying = false
@@ -100,6 +102,7 @@ final class PlayerViewController: UIViewController {
         view.addSubview(surface)
         surface.pin(to: view)
         surface.playerLayer.player = playback.player
+        surface.attachExternalView(playback.externalVideoView)
 
         controls.backgroundColor = UIColor.black.withAlphaComponent(0.16)
         view.addSubview(controls)
@@ -314,6 +317,8 @@ final class PlayerViewController: UIViewController {
         loadGeneration += 1
         let generation = loadGeneration
         loadTask?.cancel()
+        currentSource = nil
+        usedTranscodeFallback = false
         playback.stop()
         handle(.loading)
         errorStack.isHidden = true
@@ -331,11 +336,13 @@ final class PlayerViewController: UIViewController {
             do {
                 let file = self.currentFile
                 let path = self.currentPath
-                let url = try await AppEnvironment.shared.api.playbackURL(for: file)
+                let source = try await AppEnvironment.shared.api.playbackSource(for: file)
                 guard !Task.isCancelled, generation == self.loadGeneration, path == self.currentPath else { return }
+                self.currentSource = source
                 let chapter = AppEnvironment.shared.studyStore.state(for: self.course).state(for: path)
                 let resume = chapter.status == .done ? 0 : chapter.position
-                self.playback.load(url: url, resumeAt: resume, rate: self.normalRate)
+                self.surface.showsExternalPlayer = source.engine == .vlc
+                self.playback.load(url: source.url, resumeAt: resume, rate: self.normalRate, engine: source.engine)
             } catch {
                 guard !Task.isCancelled, generation == self.loadGeneration else { return }
                 self.handle(.failed(error.localizedDescription))
@@ -344,6 +351,7 @@ final class PlayerViewController: UIViewController {
     }
 
     private func handle(_ newState: PlaybackState) {
+        if case .failed = newState, activateTranscodeFallback() { return }
         state = newState
         switch newState {
         case .idle:
@@ -383,6 +391,21 @@ final class PlayerViewController: UIViewController {
             showControls()
         }
         applyControlVisibility()
+    }
+
+    private func activateTranscodeFallback() -> Bool {
+        guard !usedTranscodeFallback,
+              currentFile.fileExtension == "flv",
+              let source = currentSource,
+              source.engine == .vlc,
+              let fallbackURL = source.fallbackURL else { return false }
+        usedTranscodeFallback = true
+        let resume = playback.currentTime
+        surface.showsExternalPlayer = false
+        showGestureHUD("直接播放失败，正在尝试 NAS 转封装")
+        handle(.loading)
+        playback.load(url: fallbackURL, resumeAt: resume, rate: normalRate, engine: .avFoundation)
+        return true
     }
 
     private func updateProgress(position: Double, duration: Double) {

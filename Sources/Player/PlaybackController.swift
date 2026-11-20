@@ -1,4 +1,32 @@
 import AVFoundation
+import UIKit
+
+enum PlaybackEngineKind: Equatable {
+    case avFoundation
+    case vlc
+}
+
+struct PlaybackSource: Equatable {
+    let url: URL
+    let engine: PlaybackEngineKind
+    var fallbackURL: URL?
+}
+
+protocol PlaybackEngine: AnyObject {
+    var onStateChange: ((PlaybackState) -> Void)? { get set }
+    var onProgress: ((Double, Double) -> Void)? { get set }
+    var onNaturalEnd: (() -> Void)? { get set }
+    var currentTime: Double { get }
+    var duration: Double { get }
+    var isPlaying: Bool { get }
+    var rate: Float { get }
+    func load(url: URL, resumeAt: Double, rate: Float, automaticallyPlay: Bool)
+    func play()
+    func pause()
+    func setRate(_ value: Float)
+    func seek(to seconds: Double, completion: ((Bool) -> Void)?)
+    func stop()
+}
 
 enum PlaybackState {
     case idle
@@ -12,7 +40,7 @@ enum PlaybackState {
 }
 
 /// Owns one AVPlayer and rejects callbacks from replaced items or earlier generations.
-final class PlaybackController: NSObject {
+final class AVPlaybackController: NSObject, PlaybackEngine {
     let player = AVPlayer()
     var onStateChange: ((PlaybackState) -> Void)?
     var onProgress: ((Double, Double) -> Void)?
@@ -26,6 +54,7 @@ final class PlaybackController: NSObject {
     private var endObserver: NSObjectProtocol?
     private var restoredGeneration = -1
     private var preferredRate: Float = 1
+    private var suppressEndAfterSeek = false
 
     var currentTime: Double {
         let value = player.currentTime().seconds
@@ -40,11 +69,12 @@ final class PlaybackController: NSObject {
     var isPlaying: Bool { player.timeControlStatus == .playing }
     var rate: Float { player.rate }
 
-    func load(url: URL, resumeAt: Double, rate: Float, automaticallyPlay: Bool = true) {
+    func load(url: URL, resumeAt: Double, rate: Float, automaticallyPlay: Bool) {
         generation += 1
         let currentGeneration = generation
         preferredRate = max(0.5, rate)
         restoredGeneration = -1
+        suppressEndAfterSeek = false
         removeItemObservers()
         player.currentItem?.cancelPendingSeeks()
         player.pause()
@@ -72,7 +102,7 @@ final class PlaybackController: NSObject {
         if isPlaying { player.rate = value }
     }
 
-    func seek(to seconds: Double, completion: ((Bool) -> Void)? = nil) {
+    func seek(to seconds: Double, completion: ((Bool) -> Void)?) {
         guard let item = player.currentItem else {
             completion?(false)
             return
@@ -84,6 +114,8 @@ final class PlaybackController: NSObject {
             return
         }
         let currentGeneration = generation
+        let currentDuration = duration
+        suppressEndAfterSeek = currentDuration > 0 && target >= currentDuration - 0.5
         item.cancelPendingSeeks()
         item.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self, weak item] finished in
             DispatchQueue.main.async {
@@ -98,6 +130,7 @@ final class PlaybackController: NSObject {
 
     func stop() {
         generation += 1
+        suppressEndAfterSeek = false
         removeItemObservers()
         player.currentItem?.cancelPendingSeeks()
         player.pause()
@@ -155,7 +188,11 @@ final class PlaybackController: NSObject {
             self.player.pause()
             self.onStateChange?(.ended)
             self.onProgress?(self.duration, self.duration)
-            self.onNaturalEnd?()
+            if self.suppressEndAfterSeek {
+                self.suppressEndAfterSeek = false
+            } else {
+                self.onNaturalEnd?()
+            }
         }
 
         periodicObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 600), queue: .main) { [weak self, weak item] time in
@@ -188,5 +225,79 @@ final class PlaybackController: NSObject {
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         if let periodicObserver { player.removeTimeObserver(periodicObserver) }
         player.currentItem?.cancelPendingSeeks()
+    }
+}
+
+
+/// Selects the native or VLC engine while keeping the view controller independent of either.
+final class PlaybackController {
+    private let avEngine = AVPlaybackController()
+    private let vlcEngine = VLCPlaybackController()
+    private var activeEngine: PlaybackEngine?
+
+    var onStateChange: ((PlaybackState) -> Void)?
+    var onProgress: ((Double, Double) -> Void)?
+    var onNaturalEnd: (() -> Void)?
+
+    var player: AVPlayer { avEngine.player }
+    var externalVideoView: UIView { vlcEngine.videoView }
+    var currentTime: Double { activeEngine?.currentTime ?? 0 }
+    var duration: Double { activeEngine?.duration ?? 0 }
+    var isPlaying: Bool { activeEngine?.isPlaying ?? false }
+    var rate: Float { activeEngine?.rate ?? 0 }
+
+    init() {
+        bind(avEngine)
+        bind(vlcEngine)
+    }
+
+    func load(
+        url: URL,
+        resumeAt: Double,
+        rate: Float,
+        automaticallyPlay: Bool = true,
+        engine: PlaybackEngineKind = .avFoundation
+    ) {
+        let next: PlaybackEngine = engine == .vlc ? vlcEngine : avEngine
+        if activeEngine !== next {
+            let previous = activeEngine
+            activeEngine = nil
+            previous?.stop()
+        }
+        activeEngine = next
+        next.load(url: url, resumeAt: resumeAt, rate: rate, automaticallyPlay: automaticallyPlay)
+    }
+
+    func play() { activeEngine?.play() }
+    func pause() { activeEngine?.pause() }
+    func toggle() { isPlaying ? pause() : play() }
+    func setRate(_ value: Float) { activeEngine?.setRate(value) }
+    func seek(to seconds: Double, completion: ((Bool) -> Void)? = nil) {
+        guard let activeEngine else {
+            completion?(false)
+            return
+        }
+        activeEngine.seek(to: seconds, completion: completion)
+    }
+
+    func stop() {
+        let engine = activeEngine
+        activeEngine = nil
+        engine?.stop()
+    }
+
+    private func bind(_ engine: PlaybackEngine) {
+        engine.onStateChange = { [weak self, weak engine] state in
+            guard let self, let engine, self.activeEngine === engine else { return }
+            self.onStateChange?(state)
+        }
+        engine.onProgress = { [weak self, weak engine] position, duration in
+            guard let self, let engine, self.activeEngine === engine else { return }
+            self.onProgress?(position, duration)
+        }
+        engine.onNaturalEnd = { [weak self, weak engine] in
+            guard let self, let engine, self.activeEngine === engine else { return }
+            self.onNaturalEnd?()
+        }
     }
 }

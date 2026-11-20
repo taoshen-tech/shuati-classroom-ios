@@ -56,13 +56,25 @@ struct AlistAPIClient {
         return result
     }
 
-    func playbackURL(for file: AlistFile) async throws -> URL {
+    func playbackSource(for file: AlistFile) async throws -> PlaybackSource {
         let info = try await get(path: file.resolvedPath)
         let source = info.rawURL?.isEmpty == false ? info.rawURL! : file.rawURL
         guard let source, let url = absoluteURL(source) else { throw AlistError.missingPlaybackURL }
-        if file.isDirectlyPlayable { return url }
-        guard file.needsTranscode else { throw AlistError.unsupportedFormat(file.fileExtension) }
-        return try transcodeURL(source: url)
+        if file.isDirectlyPlayable { return PlaybackSource(url: url, engine: .avFoundation, fallbackURL: nil) }
+        guard file.usesVLCKit else { throw AlistError.unsupportedFormat(file.fileExtension) }
+
+        // Always try in-app FLV playback first, even when an old NAS configuration
+        // is still saved. The legacy remux endpoint is only a failure fallback.
+        var fallback: URL?
+        let transcode = configuration.transcodeURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if file.fileExtension == "flv", !transcode.isEmpty {
+            fallback = try transcodeURL(source: url, path: file.resolvedPath)
+        }
+        return PlaybackSource(url: url, engine: .vlc, fallbackURL: fallback)
+    }
+
+    func playbackURL(for file: AlistFile) async throws -> URL {
+        try await playbackSource(for: file).url
     }
 
     func readCourseState(coursePath: String) async throws -> CourseState? {
@@ -146,21 +158,27 @@ struct AlistAPIClient {
         return URL(string: value, relativeTo: baseURL)?.absoluteURL
     }
 
-    private func transcodeURL(source: URL) throws -> URL {
+    private func transcodeURL(source: URL, path: String) throws -> URL {
         let template = configuration.transcodeURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !template.isEmpty else { throw AlistError.transcodeNotConfigured }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         let sourceString = source.absoluteString
-        if template.contains("{url}") {
-            let escaped = sourceString.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? sourceString
-            guard let url = URL(string: template.replacingOccurrences(of: "{url}", with: escaped)) else {
-                throw AlistError.invalidTranscodeURL
-            }
+        if template.contains("{url}") || template.contains("{path}") {
+            let escapedURL = sourceString.addingPercentEncoding(withAllowedCharacters: allowed) ?? sourceString
+            let escapedPath = path.addingPercentEncoding(withAllowedCharacters: allowed) ?? path
+            let value = template
+                .replacingOccurrences(of: "{url}", with: escapedURL)
+                .replacingOccurrences(of: "{path}", with: escapedPath)
+            guard let url = URL(string: value) else { throw AlistError.invalidTranscodeURL }
             return url
         }
+
+        // Match the established NAS endpoint: <transcodeHost>/play?path=<Alist path>.
         guard var components = URLComponents(string: template) else { throw AlistError.invalidTranscodeURL }
+        if components.path.isEmpty || components.path == "/" { components.path = "/play" }
         var items = components.queryItems ?? []
-        items.removeAll { $0.name == "url" }
-        items.append(URLQueryItem(name: "url", value: sourceString))
+        items.removeAll { $0.name == "path" }
+        items.append(URLQueryItem(name: "path", value: path))
         components.queryItems = items
         guard let url = components.url else { throw AlistError.invalidTranscodeURL }
         return url
@@ -214,8 +232,8 @@ enum AlistError: LocalizedError {
         switch self {
         case .invalidResponse: return "服务器返回了无法识别的数据"
         case .missingPlaybackURL: return "未获取到视频播放地址"
-        case .unsupportedFormat(let value): return "暂不支持直接播放 .\(value) 文件，请转换为 MP4"
-        case .transcodeNotConfigured: return "FLV 视频需要先在设置中填写 NAS 转封装地址"
+        case .unsupportedFormat(let value): return "暂不支持 .\(value) 文件"
+        case .transcodeNotConfigured: return "NAS 转封装地址为空"
         case .invalidTranscodeURL: return "转封装地址无效"
         case .api(_, let message): return message.isEmpty ? "Alist 请求失败" : message
         case .http(let status, _): return "网络请求失败（HTTP \(status)）"

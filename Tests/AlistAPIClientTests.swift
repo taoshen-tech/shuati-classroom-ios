@@ -40,6 +40,33 @@ final class AlistAPIClientTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "https://media.example.com/01.mp4")
     }
 
+
+    func testFLVUsesRawURLWithVLCKitByDefault() async throws {
+        URLProtocolStub.handler = { _ in
+            Self.jsonResponse(["code": 200, "message": "success", "data": [
+                "name": "01.flv", "path": "/root/01.flv", "is_dir": false,
+                "raw_url": "https://media.example.com/01.flv"
+            ]])
+        }
+        let source = try await makeClient().playbackSource(for: AlistFile(name: "01.flv", path: "/root/01.flv"))
+        XCTAssertEqual(source.url.absoluteString, "https://media.example.com/01.flv")
+        XCTAssertEqual(source.engine, .vlc)
+    }
+
+    func testConfiguredFLVRemuxUsesLegacyPathEndpoint() async throws {
+        URLProtocolStub.handler = { _ in
+            Self.jsonResponse(["code": 200, "message": "success", "data": [
+                "name": "01.flv", "path": "/root/01.flv", "is_dir": false,
+                "raw_url": "https://media.example.com/01.flv"
+            ]])
+        }
+        let client = makeClient(transcodeURL: "https://nas.example.com:8080")
+        let source = try await client.playbackSource(for: AlistFile(name: "01.flv", path: "/root/01.flv"))
+        XCTAssertEqual(source.url.absoluteString, "https://media.example.com/01.flv")
+        XCTAssertEqual(source.engine, .vlc)
+        XCTAssertEqual(source.fallbackURL?.absoluteString, "https://nas.example.com:8080/play?path=/root/01.flv")
+    }
+
     func testMissingRemoteStateIsNotAnError() async throws {
         URLProtocolStub.handler = { _ in
             Self.jsonResponse(["code": 500, "message": "object not found"])
@@ -48,8 +75,8 @@ final class AlistAPIClientTests: XCTestCase {
         XCTAssertNil(state)
     }
 
-    private func makeClient() -> AlistAPIClient {
-        let configuration = ServerConfiguration(serverURL: "https://alist.example.com", courseRoot: "/root", transcodeURL: "", username: "test")
+    private func makeClient(transcodeURL: String = "") -> AlistAPIClient {
+        let configuration = ServerConfiguration(serverURL: "https://alist.example.com", courseRoot: "/root", transcodeURL: transcodeURL, username: "test")
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.protocolClasses = [URLProtocolStub.self]
         return AlistAPIClient(configuration: configuration, token: "token", session: URLSession(configuration: sessionConfiguration))

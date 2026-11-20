@@ -41,8 +41,8 @@ final class LoginViewController: UIViewController, UITextFieldDelegate {
         configure(usernameField, title: "用户名", placeholder: "Alist 用户名", stack: stack)
         configure(passwordField, title: "密码", placeholder: "仅保存在本机钥匙串", stack: stack)
         passwordField.isSecureTextEntry = true
-        configure(transcodeField, title: "FLV 转封装地址（选填）", placeholder: "服务地址，或包含 {url} 的地址模板", stack: stack)
-        let note = UILabel.make("支持 MP4、MOV、M4V、M3U8 直接播放；FLV 使用转封装服务。地址与账号不会写死在应用中。", size: 12, color: .secondaryLabel)
+        configure(transcodeField, title: "NAS 转封装地址（选填）", placeholder: "直接播放失败时备用；兼容 /play?path=", stack: stack)
+        let note = UILabel.make("FLV、MKV、AVI、TS、WebM 默认使用内置 VLCKit 在线播放；FLV 直接播放失败时，可选用 NAS 转封装备用服务。地址与账号不会写死在应用中。", size: 12, color: .secondaryLabel)
         stack.addArrangedSubview(note)
 
         submitButton.addTarget(self, action: #selector(submit), for: .touchUpInside)
