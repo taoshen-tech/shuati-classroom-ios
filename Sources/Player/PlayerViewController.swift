@@ -229,7 +229,7 @@ final class PlayerViewController: UIViewController {
         rateButton.titleLabel?.font = .monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
         rateButton.addTarget(self, action: #selector(cycleRate), for: .touchUpInside)
         configureTransportButton(previousButton, name: "backward.end.fill", action: #selector(previous))
-        configureTransportButton(nextButton, name: "forward.end.fill", action: #selector(next))
+        configureTransportButton(nextButton, name: "forward.end.fill", action: #selector(nextChapter))
 
         let progressRow = UIStackView(arrangedSubviews: [currentLabel, slider, durationLabel])
         progressRow.axis = .horizontal
@@ -303,7 +303,7 @@ final class PlayerViewController: UIViewController {
     private func configureAudio() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
         try? AVAudioSession.sharedInstance().setActive(true)
-        NotificationCenter.default.addObserver(self, selector: #selector(saveCurrentProgress), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(saveProgressFromNotification), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleInterruption), name: AVAudioSession.interruptionNotification, object: nil)
         let volumeView = MPVolumeView(frame: CGRect(x: -2000, y: -2000, width: 100, height: 40))
         view.addSubview(volumeView)
@@ -398,7 +398,11 @@ final class PlayerViewController: UIViewController {
         }
     }
 
-    @objc private func saveCurrentProgress() {
+    @objc private func saveProgressFromNotification() {
+        saveCurrentProgress()
+    }
+
+    private func saveCurrentProgress() {
         AppEnvironment.shared.studyStore.recordPlayback(
             course: course,
             path: currentPath,
@@ -430,7 +434,7 @@ final class PlayerViewController: UIViewController {
         switchTo(index - 1)
     }
 
-    @objc private func next() {
+    @objc private func nextChapter() {
         guard index < playlist.count - 1 else { return }
         switchTo(index + 1)
     }
