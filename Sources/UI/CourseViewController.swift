@@ -281,7 +281,7 @@ final class DatePlanViewController: UIViewController {
         picker.locale = Locale(identifier: "zh_CN")
         let titleLabel = UILabel.make("安排学习日期", size: 22, weight: .bold)
         let save = UIButton.action("保存计划")
-        save.addTarget(self, action: #selector(save), for: .touchUpInside)
+        save.addTarget(self, action: #selector(savePlan), for: .touchUpInside)
         let clear = UIButton.action("清除计划", primary: false)
         clear.addTarget(self, action: #selector(clearPlan), for: .touchUpInside)
         clear.isHidden = !hasExistingPlan
@@ -292,7 +292,7 @@ final class DatePlanViewController: UIViewController {
         stack.pin(to: view.safeAreaLayoutGuide, insets: UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20))
     }
 
-    @objc private func save() {
+    @objc private func savePlan() {
         dismiss(animated: true) { self.onSave(self.picker.date) }
     }
 
